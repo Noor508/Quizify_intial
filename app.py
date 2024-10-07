@@ -1,5 +1,3 @@
-import hashlib
-import pickle
 import time
 import streamlit as st
 from langchain_community.document_loaders import PyPDFLoader
@@ -17,52 +15,32 @@ load_dotenv()
 api_key = os.environ.get("API_KEY")
 endpoint = os.environ.get("END_POINT")
 
-
-# Function to generate a checksum (hash) for the PDF content
-def generate_pdf_hash(pdf_content):
-    hasher = hashlib.md5()
-    hasher.update(pdf_content)
-    return hasher.hexdigest()
-
-# Function to generate MCQs from text (example implementation)
-def generate_mcqs_from_text(text):
-    # Mock implementation for MCQ generation
-    return [f"MCQ based on: {text[:100]}"]
-
-# Load previously saved PDFs and MCQs (if any)
-if os.path.exists("pdf_mcqs_data.pkl"):
-    with open("pdf_mcqs_data.pkl", "rb") as f:
-        saved_data = pickle.load(f)  # Dictionary with hash as key and MCQs as value
-else:
-    saved_data = {}
-
 headers = {
     'Content-Type': 'application/json',
     'api-key': api_key
 }
 
+# dummy_mcqs = [{'question': 'What type of data does supervised learning use?', 'options': ['Unlabeled data', 'Labeled data', 'Random data', 'Synthetic data'], 'answer': 'Labeled data'}, {'question': 'Which subcategory can supervised learning be divided into?', 'options': ['Reinforcement learning', 'Clustering', 'Classification', 'Dimensionality reduction'], 'answer': 'Classification'}, {'question': 'Which of the following is an example of a classification algorithm?', 'options': ['Support Vector Machines', 'Linear Regression', 'Logistic Regression', 'Clustering'], 'answer': 'Support Vector Machines'}, {'question': 'What is a common application of clustering in unsupervised learning?', 'options': ['Predicting house prices', 'Customer segmentation', 'Spam detection', 'Weather forecasting'], 'answer': 'Customer segmentation'}, {'question': 'What is the purpose of association in data analysis?', 'options': ['To group customers based on similarities', 'To find relationships between variables', 'To reduce the number of variables in data', 'To improve picture quality'], 'answer': 'To find relationships between variables'}, {'question': 'What is dimensional reduction used for?', 'options': ['Grouping customers based on age or location', 'Finding relationships between variables', 'Reducing the number of variables while preserving information', 'Analyzing market baskets'], 'answer': 'Reducing the number of variables while preserving information'}, {'question': 'What is a key difference between supervised and unsupervised learning models?', 'options': ['Supervised learning models require labeled data, while unsupervised learning models do not.', 'Unsupervised learning models are always more accurate than supervised learning models.', 'Supervised learning models work on their own to discover the inherent structure of data.', 'Unsupervised learning models predict outcomes based on labeled data.'], 'answer': 'Supervised learning models require labeled data, while unsupervised learning models do not.'}, {'question': 'Which type of learning model can automatically find patterns in data and group them together without human intervention?', 'options': ['Supervised learning models', 'Unsupervised learning models', 'Both supervised and unsupervised learning models', 'Neither supervised nor unsupervised learning models'], 'answer': 'Unsupervised learning models'}, {'question': 'What is a characteristic of unsupervised learning?', 'options': ['Handles large volumes of data in real time', 'Provides high transparency into data clustering', 'Requires a large amount of labeled data', 'Is ideal for medical images'], 'answer': 'Handles large volumes of data in real time'}, {'question': "What type of learning method is described as a 'happy medium' between supervised and unsupervised learning?", 'options': ['Reinforcement learning', 'Semi-supervised learning', 'Supervised learning', 'Unsupervised learning'], 'answer': 'Semi-supervised learning'}, {'question': 'What is a powerful way to gain data insights?', 'options': ['Manual analysis', 'Machine learning models', 'Random sampling', 'Survey methods'], 'answer': 'Machine learning models'}, {'question': 'What is the first step in choosing the right model for your data?', 'options': ['Deciding the type of data', 'Choosing between supervised and unsupervised learning', 'Collecting data', 'Evaluating data quality'], 'answer': 'Choosing between supervised and unsupervised learning'}]
 
 # Define a function to get the chat completion
-def get_chat_completion(messages, retries=3):
+def get_chat_completion(messages):
     data = {
         "messages": messages,
+        # "max_tokens": 500,
         "temperature": 0.7,
         "response_format": {"type": "json_object"}
     }
 
-    for attempt in range(retries):
-        response = requests.post(endpoint, headers=headers, data=json.dumps(data))
-        
-        if response.status_code == 200:
-            result = response.json()
-            return result['choices'][0]['message']['content']
-        else:
-            if attempt < retries - 1:
-                time.sleep(2)  # Wait before retrying
-            else:
-                st.error(f"Error: {response.status_code}, {response.text}")
-                return None
+    # Make the POST request to the API
+    response = requests.post(endpoint, headers=headers, data=json.dumps(data))
 
+    # Handle the response
+    if response.status_code == 200:
+        result = response.json()
+        return result['choices'][0]['message']['content']
+    else:
+        st.error(f"Error: {response.status_code}, {response.text}")
+        return None
 
 # Define the MCQ and List_of_MCQs data models
 class MCQ(BaseModel):
@@ -179,43 +157,16 @@ def extract_video_id(url):
     return None
 
 st.title("PDF and YouTube Quiz Generator")
-def generate_pdf_hash(pdf_content):
-    hasher = hashlib.md5()
-    hasher.update(pdf_content)
-    return hasher.hexdigest()
 
-# Function to generate MCQs from text (example implementation)
-def generate_mcqs_from_text(text):
-    # Mock implementation for MCQ generation
-    return [f"MCQ based on: {text[:100]}"]
-
-# Load previously saved PDFs and MCQs (if any)
-if os.path.exists("pdf_mcqs_data.pkl"):
-    with open("pdf_mcqs_data.pkl", "rb") as f:
-        saved_data = pickle.load(f)  # Dictionary with hash as key and MCQs as value
-else:
-    saved_data = {}
 tab1, tab2 = st.tabs(["PDF to MCQs", "YouTube Link Quiz"])
 
 with tab1:
     st.header("PDF to MCQs")
     uploaded_file = st.file_uploader("Upload a PDF file", type=["pdf"])
-    
-    if uploaded_file is not None:
-        # Read the uploaded PDF file
-        pdf_content = uploaded_file.read()
-        
-        # Generate a hash for the uploaded PDF content
-        pdf_hash = generate_pdf_hash(pdf_content)
-        
-        if pdf_hash in saved_data:
-            # If the PDF is already uploaded, load the saved MCQs
-            st.success("This document has already been processed.")
-            all_mcqs = saved_data[pdf_hash]
-        else:
-            # If it's a new document, process it and generate new MCQs
+    if st.session_state.current_text == "" and st.session_state.all_mcqs == []:
+        if uploaded_file is not None:
             with open("uploaded_file.pdf", "wb") as f:
-                f.write(pdf_content)
+                f.write(uploaded_file.getbuffer())
 
             pdf_reader = PyPDFLoader("uploaded_file.pdf")
             documents = pdf_reader.load()
@@ -223,18 +174,40 @@ with tab1:
 
             os.remove("uploaded_file.pdf")
 
-            all_mcqs = generate_mcqs_from_text(pdf_text)
-            
-            # Save the new MCQs and PDF hash to the pickle file
-            saved_data[pdf_hash] = all_mcqs
-            with open("pdf_mcqs_data.pkl", "wb") as f:
-                pickle.dump(saved_data, f)
-            
-            st.success("New MCQs have been generated and saved.")
+            st.session_state.current_text = pdf_text
+            st.session_state.all_mcqs = generate_mcqs_from_text(pdf_text)
+            st.rerun()
+        
+    if st.session_state.all_mcqs:
+        all_mcqs = st.session_state.all_mcqs
+        current_question = st.session_state.current_question
 
-        # Display the MCQs
-        for mcq in all_mcqs:
-            st.write(mcq)
+        if current_question < len(all_mcqs):
+            mcq = all_mcqs[current_question]
+
+            st.write(f"**Question {current_question + 1}:** {mcq['question']}")
+            selected_option = st.radio("Select an option:", mcq['options'], key=f"question_{current_question}")
+
+            if st.button("Submit"):
+                st.session_state.selected_option = selected_option
+                st.session_state.show_feedback = True
+
+            if st.session_state.show_feedback:
+                if st.session_state.selected_option == mcq['answer']:
+                    st.success("Correct!")
+                    st.session_state.score += 1
+                else:
+                    st.error(f"Wrong! The correct answer is: {mcq['answer']}")
+
+                if st.button("Next"):
+                    st.session_state.current_question += 1
+                    st.session_state.show_feedback = False
+                    st.session_state.selected_option = None
+                    st.rerun()
+        else:
+            st.write(f"Quiz completed! Your score is {st.session_state.score} out of {len(all_mcqs)}.")
+    else:
+        st.write("Please upload a PDF file to generate MCQs.")
 
 with tab2:
     st.header("YouTube Link Quiz")
